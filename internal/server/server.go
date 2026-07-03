@@ -86,7 +86,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		case <-ctx.Done():
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			return errors.Join(ctx.Err(), s.http.Shutdown(shutdownCtx))
+			return s.http.Shutdown(shutdownCtx)
 		case err := <-errCh:
 			if errors.Is(err, http.ErrServerClosed) {
 				return nil

@@ -2,12 +2,28 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/euxaristia/twodev/internal/auth"
 )
+
+func checkTokenFilePermissions(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("%s must be owner-readable only (mode %o)", path, info.Mode().Perm())
+	}
+	return nil
+}
 
 // LoadAgentTokens reads bearer tokens for the /~server agent websocket.
 // TWODEV_AGENT_TOKENS (comma-separated) takes precedence over site/conf/agent-tokens.txt.
@@ -29,6 +45,10 @@ func LoadAgentTokens(siteDir string) (auth.StaticTokens, error) {
 		return tokens, nil
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := checkTokenFilePermissions(path); err != nil {
+		_ = file.Close()
 		return nil, err
 	}
 	defer file.Close()
