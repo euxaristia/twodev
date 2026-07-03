@@ -26,8 +26,9 @@ type Options struct {
 	Config      config.Server
 	Paths       config.Paths
 	Database    *sql.DB
-	AgentTokens auth.StaticTokens
-	Logger      *slog.Logger
+	AgentTokens  auth.StaticTokens
+	AccessTokens auth.StaticTokens
+	Logger       *slog.Logger
 }
 
 // LoadOptionsFromEnv loads server.properties, opens the database, and resolves site paths.
@@ -60,12 +61,19 @@ func LoadOptionsFromEnv(logger *slog.Logger) (Options, error) {
 		logger.Warn("no agent tokens configured; set TWODEV_AGENT_TOKENS or site/conf/agent-tokens.txt")
 	}
 
+	accessTokens, err := config.LoadAccessTokens(paths.SiteDir)
+	if err != nil {
+		_ = db.Close()
+		return Options{}, fmt.Errorf("load access tokens: %w", err)
+	}
+
 	return Options{
-		Config:      cfg,
-		Paths:       paths,
-		Database:    db,
-		AgentTokens: tokens,
-		Logger:      logger,
+		Config:       cfg,
+		Paths:        paths,
+		Database:     db,
+		AgentTokens:  tokens,
+		AccessTokens: accessTokens,
+		Logger:       logger,
 	}, nil
 }
 

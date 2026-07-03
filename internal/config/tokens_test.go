@@ -38,3 +38,16 @@ func TestLoadAgentTokensFromFile(t *testing.T) {
 		t.Fatal("expected token-one from file")
 	}
 }
+
+func TestLoadAccessTokensFromEnv(t *testing.T) {
+	t.Setenv("TWODEV_ACCESS_TOKENS", "api-one,api-two")
+	tokens, err := LoadAccessTokens("site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{"api-one", "api-two"} {
+		if !tokens.Valid(token) {
+			t.Fatalf("expected token %q", token)
+		}
+	}
+}
