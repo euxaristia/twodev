@@ -2,6 +2,8 @@ server-product/docker/build/
 server-product/docker/onedev-*/
 target/
 bin/
+terminals/
+scripts/
 **/.classpath
 **/.gitignore
 **/.settings
