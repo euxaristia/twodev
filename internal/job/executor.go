@@ -10,17 +10,25 @@ import (
 	"strings"
 
 	"github.com/euxaristia/twodev/internal/buildspec"
+	"github.com/euxaristia/twodev/internal/git"
 )
 
 // Executor runs buildspec jobs on the local machine.
 type Executor struct {
 	workRoot string
+	repoRoot string
+	git      *git.Service
 	logger   *Logger
 }
 
 // NewExecutor creates a local job executor rooted at workRoot.
 func NewExecutor(workRoot string, logger *Logger) *Executor {
-	return &Executor{workRoot: workRoot, logger: logger}
+	return &Executor{workRoot: workRoot, git: git.NewService(""), logger: logger}
+}
+
+// NewExecutorWithRepo creates an executor that can run checkout steps.
+func NewExecutorWithRepo(workRoot, repoRoot string, logger *Logger) *Executor {
+	return &Executor{workRoot: workRoot, repoRoot: repoRoot, git: git.NewService(""), logger: logger}
 }
 
 // RunJob executes all steps for a named job from a parsed build spec.
@@ -35,6 +43,9 @@ func (e *Executor) RunJob(ctx context.Context, spec *buildspec.BuildSpec, jobNam
 		return err
 	}
 	jobCtx.WorkDir = workDir
+	if jobCtx.RepoRoot == "" {
+		jobCtx.RepoRoot = e.repoRoot
+	}
 
 	for _, step := range job.Steps {
 		if err := ctx.Err(); err != nil {
@@ -57,12 +68,50 @@ func (e *Executor) runStep(ctx context.Context, jobCtx Context, step buildspec.S
 	case "CommandStep":
 		return e.runCommandStep(ctx, jobCtx, step)
 	case "CheckoutStep":
-		e.logger.Log("checkout step delegated to git service in a later slice")
-		return nil
+		return e.runCheckoutStep(ctx, jobCtx, step)
 	default:
 		e.logger.Log(fmt.Sprintf("skipping unsupported step type %s", step.Type))
 		return nil
 	}
+}
+
+func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step buildspec.Step) error {
+	repoRoot := jobCtx.RepoRoot
+	if repoRoot == "" {
+		return fmt.Errorf("checkout requires repo root")
+	}
+	checkoutPath := "work"
+	if raw, ok := step.Fields["checkoutPath"].(string); ok && strings.TrimSpace(raw) != "" {
+		checkoutPath = strings.TrimSpace(raw)
+	}
+	dest := filepath.Join(jobCtx.WorkDir, checkoutPath)
+	repoDir := filepath.Join(repoRoot, jobCtx.ProjectPath+".git")
+
+	depth := 0
+	if raw, ok := step.Fields["cloneDepth"].(int); ok && raw > 0 {
+		depth = raw
+	}
+	if raw, ok := step.Fields["cloneDepth"].(float64); ok && int(raw) > 0 {
+		depth = int(raw)
+	}
+	withLfs, _ := step.Fields["withLfs"].(bool)
+	withSubmodules, _ := step.Fields["withSubmodules"].(bool)
+
+	e.logger.Log(fmt.Sprintf("cloning %s into %s", jobCtx.ProjectPath, dest))
+	if err := e.git.Clone(ctx, git.CloneOptions{
+		URL:            repoDir,
+		Branch:         jobCtx.Branch,
+		Depth:          depth,
+		WithLFS:        withLfs,
+		WithSubmodules: withSubmodules,
+		DestDir:        dest,
+	}); err != nil {
+		return err
+	}
+	if jobCtx.CommitHash != "" {
+		return e.git.Checkout(ctx, dest, jobCtx.CommitHash)
+	}
+	return nil
 }
 
 func (e *Executor) runCommandStep(ctx context.Context, jobCtx Context, step buildspec.Step) error {

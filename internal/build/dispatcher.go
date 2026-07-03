@@ -72,6 +72,8 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 		BuildNumber: req.BuildNumber,
 		BuildSpec:   specYAML,
 		Branch:      build.Branch,
+		CommitHash:  build.CommitHash,
+		RepoRoot:    d.local.repoRoot,
 	})
 	if err != nil {
 		d.local.failBuild(ctx, build.ID, err)
