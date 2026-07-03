@@ -29,7 +29,8 @@ func (h *Handler) handleCreatePull(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if _, err := h.projects.GetByID(r.Context(), projectID); err != nil {
+	project, err := h.projects.GetByID(r.Context(), projectID)
+	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
@@ -54,6 +55,9 @@ func (h *Handler) handleCreatePull(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if h.indexer != nil {
+		_ = h.indexer.IndexPull(project.Path, created)
 	}
 	writeJSON(w, http.StatusCreated, created)
 }
