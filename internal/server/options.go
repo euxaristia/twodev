@@ -73,6 +73,7 @@ func ensurePaths(paths config.Paths) error {
 	dirs := []string{
 		filepath.Dir(paths.DatabasePath),
 		paths.RepoRoot,
+		paths.WorkRoot,
 		filepath.Join(paths.SiteDir, "conf"),
 	}
 	for _, dir := range dirs {

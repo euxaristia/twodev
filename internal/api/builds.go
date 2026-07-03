@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/euxaristia/twodev/internal/scheduler"
 )
 
 func (h *Handler) handleListBuilds(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +31,8 @@ func (h *Handler) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if _, err := h.projects.GetByID(r.Context(), projectID); err != nil {
+	project, err := h.projects.GetByID(r.Context(), projectID)
+	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
@@ -50,6 +53,14 @@ func (h *Handler) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if h.queue != nil {
+		h.queue.Enqueue(scheduler.JobRequest{
+			ProjectID:   projectID,
+			ProjectPath: project.Path,
+			JobName:     created.JobName,
+			BuildNumber: created.Number,
+		})
 	}
 	writeJSON(w, http.StatusCreated, created)
 }

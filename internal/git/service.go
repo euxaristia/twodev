@@ -93,6 +93,16 @@ func (s *Service) Run(ctx context.Context, dir string, args ...string) error {
 	return s.run(ctx, dir, args...)
 }
 
+// ShowBlob reads a file from a bare or normal repository at ref.
+func (s *Service) ShowBlob(ctx context.Context, repoDir, ref, path string) ([]byte, error) {
+	spec := fmt.Sprintf("%s:%s", ref, path)
+	out, err := s.output(ctx, "", "-C", repoDir, "show", spec)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(out), nil
+}
+
 // InitBareRepo creates a bare repository at dir.
 func (s *Service) InitBareRepo(ctx context.Context, dir string) error {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {

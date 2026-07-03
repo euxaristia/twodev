@@ -9,6 +9,7 @@ import (
 	"github.com/euxaristia/twodev/internal/buildspec"
 	"github.com/euxaristia/twodev/internal/issue"
 	"github.com/euxaristia/twodev/internal/pullrequest"
+	"github.com/euxaristia/twodev/internal/scheduler"
 	"github.com/euxaristia/twodev/internal/store"
 	"github.com/euxaristia/twodev/internal/version"
 )
@@ -19,11 +20,12 @@ type Handler struct {
 	builds   *store.BuildStore
 	issues   *issue.Service
 	pulls    *pullrequest.Service
+	queue    *scheduler.Queue
 	logger   *slog.Logger
 }
 
 // NewHandler creates an API handler.
-func NewHandler(db *sql.DB, logger *slog.Logger) *Handler {
+func NewHandler(db *sql.DB, logger *slog.Logger, queue *scheduler.Queue) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -32,6 +34,7 @@ func NewHandler(db *sql.DB, logger *slog.Logger) *Handler {
 		builds:   store.NewBuildStore(db),
 		issues:   issue.NewService(db),
 		pulls:    pullrequest.NewService(db),
+		queue:    queue,
 		logger:   logger,
 	}
 }

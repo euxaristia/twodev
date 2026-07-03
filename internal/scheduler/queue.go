@@ -7,6 +7,7 @@ import (
 
 // JobRequest describes work to schedule.
 type JobRequest struct {
+	ProjectID   int64
 	ProjectPath string
 	JobName     string
 	BuildNumber int
