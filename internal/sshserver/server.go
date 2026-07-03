@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 
+	"github.com/euxaristia/twodev/internal/config"
 	"github.com/euxaristia/twodev/internal/git"
 	"golang.org/x/crypto/ssh"
 )
@@ -15,8 +16,9 @@ import (
 type Config struct {
 	Host        string
 	Port        int
-	RepoRoot    string
-	HostKeyPath string
+	RepoRoot       string
+	HostKeyPath    string
+	AuthorizedKeys config.SSHAuthorizedKeys
 }
 
 // Server serves git commands over SSH.
@@ -37,9 +39,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("load host key: %w", err)
 	}
 	serverCfg := &ssh.ServerConfig{
-		PublicKeyCallback: func(_ ssh.ConnMetadata, _ ssh.PublicKey) (*ssh.Permissions, error) {
-			return &ssh.Permissions{}, nil
-		},
+		PublicKeyCallback: publicKeyCallback(cfg.AuthorizedKeys),
 	}
 	serverCfg.AddHostKey(signer)
 	return &Server{cfg: cfg, config: serverCfg, git: git.NewService("")}, nil
