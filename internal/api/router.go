@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/euxaristia/twodev/internal/buildspec"
+	"github.com/euxaristia/twodev/internal/issue"
+	"github.com/euxaristia/twodev/internal/pullrequest"
 	"github.com/euxaristia/twodev/internal/store"
 	"github.com/euxaristia/twodev/internal/version"
 )
@@ -14,6 +16,9 @@ import (
 // Handler serves twodev JSON APIs under /~api/twodev/.
 type Handler struct {
 	projects *store.ProjectStore
+	builds   *store.BuildStore
+	issues   *issue.Service
+	pulls    *pullrequest.Service
 	logger   *slog.Logger
 }
 
@@ -22,7 +27,13 @@ func NewHandler(db *sql.DB, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{projects: store.NewProjectStore(db), logger: logger}
+	return &Handler{
+		projects: store.NewProjectStore(db),
+		builds:   store.NewBuildStore(db),
+		issues:   issue.NewService(db),
+		pulls:    pullrequest.NewService(db),
+		logger:   logger,
+	}
 }
 
 // Register mounts routes on mux.
@@ -31,6 +42,19 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /~api/twodev/buildspec/validate", h.handleValidateBuildSpec)
 	mux.HandleFunc("GET /~api/twodev/projects", h.handleListProjects)
 	mux.HandleFunc("POST /~api/twodev/projects", h.handleCreateProject)
+	mux.HandleFunc("GET /~api/twodev/projects/{id}", h.handleGetProject)
+
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/issues", h.handleListIssues)
+	mux.HandleFunc("POST /~api/twodev/projects/{id}/issues", h.handleCreateIssue)
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/issues/{number}", h.handleGetIssue)
+
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/pulls", h.handleListPulls)
+	mux.HandleFunc("POST /~api/twodev/projects/{id}/pulls", h.handleCreatePull)
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/pulls/{number}", h.handleGetPull)
+
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds", h.handleListBuilds)
+	mux.HandleFunc("POST /~api/twodev/projects/{id}/builds", h.handleCreateBuild)
+	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds/{job}/{number}", h.handleGetBuild)
 }
 
 func (h *Handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
@@ -79,6 +103,20 @@ func (h *Handler) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, project)
+}
+
+func (h *Handler) handleGetProject(w http.ResponseWriter, r *http.Request) {
+	projectID, err := projectIDFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	project, err := h.projects.GetByID(r.Context(), projectID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, project)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
