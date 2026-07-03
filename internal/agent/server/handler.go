@@ -77,10 +77,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch msg.Type {
 		case protocol.TypeAgentData:
-			var info struct {
-				Name string `json:"name"`
-			}
-			if err := json.Unmarshal(msg.Data, &info); err == nil && info.Name != "" {
+			var info AgentInfo
+			if err := json.Unmarshal(msg.Data, &info); err == nil {
+				h.registry.SetInfo(token, info)
 				h.logger.Info("agent connected", "name", info.Name, "token_prefix", token[:min(8, len(token))])
 			} else {
 				h.logger.Info("agent connected", "token_prefix", token[:min(8, len(token))])
