@@ -10,6 +10,7 @@ import (
 
 	agentserver "github.com/euxaristia/twodev/internal/agent/server"
 	"github.com/euxaristia/twodev/internal/api"
+	"github.com/euxaristia/twodev/internal/auth"
 	buildrunner "github.com/euxaristia/twodev/internal/build"
 	"github.com/euxaristia/twodev/internal/githttp"
 	"github.com/euxaristia/twodev/internal/scheduler"
@@ -66,12 +67,14 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 
+	accessGuard := auth.NewGuard(s.opts.AccessTokens)
 	api.NewHandler(s.opts.Database, s.opts.Logger, api.HandlerConfig{
 		Queue:    s.queue,
 		RepoRoot: s.opts.Paths.RepoRoot,
 		HTTPPort: s.opts.Config.HTTPPort,
+		Guard:    accessGuard,
 	}).Register(mux)
-	githttp.NewHandler(s.opts.Paths.RepoRoot).Register(mux)
+	githttp.NewHandler(s.opts.Paths.RepoRoot, accessGuard).Register(mux)
 	mux.Handle("/~server", s.agentServer)
 
 	addr := fmt.Sprintf("%s:%d", s.opts.Config.HTTPHost, s.opts.Config.HTTPPort)

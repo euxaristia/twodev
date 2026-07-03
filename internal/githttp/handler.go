@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/euxaristia/twodev/internal/auth"
 	"github.com/euxaristia/twodev/internal/git"
 )
 
@@ -16,11 +17,12 @@ import (
 type Handler struct {
 	repoRoot string
 	git      *git.Service
+	guard    *auth.Guard
 }
 
 // NewHandler creates a git HTTP handler rooted at repoRoot.
-func NewHandler(repoRoot string) *Handler {
-	return &Handler{repoRoot: repoRoot, git: git.NewService("")}
+func NewHandler(repoRoot string, guard *auth.Guard) *Handler {
+	return &Handler{repoRoot: repoRoot, git: git.NewService(""), guard: guard}
 }
 
 // Register mounts git routes. Project paths may contain slashes.
@@ -35,6 +37,9 @@ func (h *Handler) routeGET(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if !h.authorized(w, r) {
+		return
+	}
 	h.handleInfoRefs(w, r, project)
 }
 
@@ -42,6 +47,9 @@ func (h *Handler) routePOST(w http.ResponseWriter, r *http.Request) {
 	project, action, ok := splitGitPath(r.PathValue("path"))
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+	if !h.authorized(w, r) {
 		return
 	}
 	switch action {
@@ -102,6 +110,15 @@ func (h *Handler) serveRPC(w http.ResponseWriter, r *http.Request, project, name
 	if err := fn(r.Context(), repoDir, r.Body, w); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "git %s failed: %v\n", name, err)
 	}
+}
+
+func (h *Handler) authorized(w http.ResponseWriter, r *http.Request) bool {
+	if h.guard == nil || !h.guard.Enabled() || h.guard.ValidRequest(r) {
+		return true
+	}
+	w.Header().Set("WWW-Authenticate", `Basic realm="twodev"`)
+	http.Error(w, "forbidden", http.StatusForbidden)
+	return false
 }
 
 func (h *Handler) repoDir(project string) (string, error) {

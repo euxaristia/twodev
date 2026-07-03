@@ -3,9 +3,15 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/euxaristia/twodev/internal/auth"
 )
 
 func (h *Handler) handleBranchUpdate(w http.ResponseWriter, r *http.Request) {
+	if h.guard != nil && h.guard.Enabled() && !h.guard.ValidRequest(r) && !auth.IsLoopback(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	if h.trigger == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "branch triggers not configured"})
 		return

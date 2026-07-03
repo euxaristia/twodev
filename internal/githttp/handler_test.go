@@ -30,7 +30,7 @@ func TestInfoRefsUploadPack(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(root).Register(mux)
+	NewHandler(root, nil).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/demo.git/info/refs?service=git-upload-pack", nil)
 	rec := httptest.NewRecorder()

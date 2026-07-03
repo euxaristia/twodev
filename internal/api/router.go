@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/euxaristia/twodev/internal/auth"
 	buildtrigger "github.com/euxaristia/twodev/internal/build"
 	"github.com/euxaristia/twodev/internal/buildspec"
 	"github.com/euxaristia/twodev/internal/git"
@@ -27,6 +28,7 @@ type Handler struct {
 	repoRoot string
 	httpPort int
 	git      *git.Service
+	guard    *auth.Guard
 	logger   *slog.Logger
 }
 
@@ -35,6 +37,7 @@ type HandlerConfig struct {
 	Queue    *scheduler.Queue
 	RepoRoot string
 	HTTPPort int
+	Guard    *auth.Guard
 }
 
 // NewHandler creates an API handler.
@@ -50,6 +53,7 @@ func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 		queue:    cfg.Queue,
 		repoRoot: cfg.RepoRoot,
 		httpPort: cfg.HTTPPort,
+		guard:    cfg.Guard,
 		logger:   logger,
 	}
 	if cfg.Queue != nil && cfg.RepoRoot != "" {
@@ -61,23 +65,23 @@ func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 
 // Register mounts routes on mux.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /~api/twodev/version", h.handleVersion)
-	mux.HandleFunc("POST /~api/twodev/buildspec/validate", h.handleValidateBuildSpec)
-	mux.HandleFunc("GET /~api/twodev/projects", h.handleListProjects)
-	mux.HandleFunc("POST /~api/twodev/projects", h.handleCreateProject)
-	mux.HandleFunc("GET /~api/twodev/projects/{id}", h.handleGetProject)
+	h.route(mux, "GET /~api/twodev/version", h.handleVersion)
+	h.route(mux, "POST /~api/twodev/buildspec/validate", h.handleValidateBuildSpec)
+	h.route(mux, "GET /~api/twodev/projects", h.handleListProjects)
+	h.route(mux, "POST /~api/twodev/projects", h.handleCreateProject)
+	h.route(mux, "GET /~api/twodev/projects/{id}", h.handleGetProject)
 
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/issues", h.handleListIssues)
-	mux.HandleFunc("POST /~api/twodev/projects/{id}/issues", h.handleCreateIssue)
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/issues/{number}", h.handleGetIssue)
+	h.route(mux, "GET /~api/twodev/projects/{id}/issues", h.handleListIssues)
+	h.route(mux, "POST /~api/twodev/projects/{id}/issues", h.handleCreateIssue)
+	h.route(mux, "GET /~api/twodev/projects/{id}/issues/{number}", h.handleGetIssue)
 
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/pulls", h.handleListPulls)
-	mux.HandleFunc("POST /~api/twodev/projects/{id}/pulls", h.handleCreatePull)
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/pulls/{number}", h.handleGetPull)
+	h.route(mux, "GET /~api/twodev/projects/{id}/pulls", h.handleListPulls)
+	h.route(mux, "POST /~api/twodev/projects/{id}/pulls", h.handleCreatePull)
+	h.route(mux, "GET /~api/twodev/projects/{id}/pulls/{number}", h.handleGetPull)
 
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds", h.handleListBuilds)
-	mux.HandleFunc("POST /~api/twodev/projects/{id}/builds", h.handleCreateBuild)
-	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds/{job}/{number}", h.handleGetBuild)
+	h.route(mux, "GET /~api/twodev/projects/{id}/builds", h.handleListBuilds)
+	h.route(mux, "POST /~api/twodev/projects/{id}/builds", h.handleCreateBuild)
+	h.route(mux, "GET /~api/twodev/projects/{id}/builds/{job}/{number}", h.handleGetBuild)
 
 	mux.HandleFunc("POST /~api/twodev/git/branch-update", h.handleBranchUpdate)
 }
