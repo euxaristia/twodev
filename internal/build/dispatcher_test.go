@@ -89,7 +89,7 @@ func TestDispatcherUsesAgentWhenConnected(t *testing.T) {
 	if err := seedDispatcherRepo(context.Background(), svc, root, bareDir); err != nil {
 		t.Fatal(err)
 	}
-	runner := NewRunner(db, repoRoot, workRoot, nil)
+	runner := NewRunner(db, repoRoot, workRoot, nil, nil)
 	dispatcher := NewDispatcher(db, registry, runner, nil)
 	req := scheduler.JobRequest{
 		ProjectID:   project.ID,
