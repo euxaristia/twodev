@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/euxaristia/twodev/internal/auth"
 	"github.com/euxaristia/twodev/internal/config"
+	"github.com/euxaristia/twodev/internal/search"
 	"github.com/euxaristia/twodev/internal/store"
 )
 
@@ -28,6 +30,8 @@ type Options struct {
 	Database    *sql.DB
 	AgentTokens  auth.StaticTokens
 	AccessTokens auth.StaticTokens
+	SearchIndex  *search.Index
+	Indexer      *search.Indexer
 	Logger       *slog.Logger
 }
 
@@ -67,12 +71,26 @@ func LoadOptionsFromEnv(logger *slog.Logger) (Options, error) {
 		return Options{}, fmt.Errorf("load access tokens: %w", err)
 	}
 
+	searchIndex, err := search.Open(paths.SearchIndex)
+	if err != nil {
+		_ = db.Close()
+		return Options{}, fmt.Errorf("open search index: %w", err)
+	}
+	indexer := search.NewIndexer(db, searchIndex)
+	if err := indexer.RebuildAll(context.Background()); err != nil {
+		_ = searchIndex.Close()
+		_ = db.Close()
+		return Options{}, fmt.Errorf("rebuild search index: %w", err)
+	}
+
 	return Options{
 		Config:       cfg,
 		Paths:        paths,
 		Database:     db,
 		AgentTokens:  tokens,
 		AccessTokens: accessTokens,
+		SearchIndex:  searchIndex,
+		Indexer:      indexer,
 		Logger:       logger,
 	}, nil
 }
@@ -83,6 +101,7 @@ func ensurePaths(paths config.Paths) error {
 		paths.RepoRoot,
 		paths.WorkRoot,
 		filepath.Join(paths.SiteDir, "conf"),
+		filepath.Dir(paths.SearchIndex),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
