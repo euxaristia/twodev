@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	agentserver "github.com/euxaristia/twodev/internal/agent/server"
 	"github.com/euxaristia/twodev/internal/auth"
 	buildtrigger "github.com/euxaristia/twodev/internal/build"
 	"github.com/euxaristia/twodev/internal/buildspec"
@@ -31,6 +32,7 @@ type Handler struct {
 	git      *git.Service
 	guard    *auth.Guard
 	indexer  *search.Indexer
+	agents   *agentserver.Registry
 	logger   *slog.Logger
 }
 
@@ -41,6 +43,7 @@ type HandlerConfig struct {
 	HTTPPort int
 	Guard    *auth.Guard
 	Indexer  *search.Indexer
+	Agents   *agentserver.Registry
 }
 
 // NewHandler creates an API handler.
@@ -58,6 +61,7 @@ func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 		httpPort: cfg.HTTPPort,
 		guard:    cfg.Guard,
 		indexer:  cfg.Indexer,
+		agents:   cfg.Agents,
 		logger:   logger,
 	}
 	if cfg.Queue != nil && cfg.RepoRoot != "" {
@@ -72,6 +76,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	h.route(mux, "GET /~api/twodev/version", h.handleVersion)
 	h.route(mux, "POST /~api/twodev/buildspec/validate", h.handleValidateBuildSpec)
 	h.route(mux, "GET /~api/twodev/search", h.handleSearch)
+	h.route(mux, "GET /~api/twodev/agents", h.handleListAgents)
 	h.route(mux, "GET /~api/twodev/projects", h.handleListProjects)
 	h.route(mux, "POST /~api/twodev/projects", h.handleCreateProject)
 	h.route(mux, "GET /~api/twodev/projects/{id}", h.handleGetProject)

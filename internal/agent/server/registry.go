@@ -16,6 +16,7 @@ type agentConn struct {
 	token   string
 	conn    *websocket.Conn
 	pending map[string]chan protocol.Call
+	info    AgentInfo
 }
 
 // Registry tracks connected agents and dispatches JSON RPC calls.
@@ -31,11 +32,47 @@ func NewRegistry() *Registry {
 
 // Register adds an agent connection.
 func (r *Registry) Register(token string, conn *websocket.Conn) *agentConn {
-	ac := &agentConn{token: token, conn: conn, pending: make(map[string]chan protocol.Call)}
+	prefix := token
+	if len(prefix) > 8 {
+		prefix = prefix[:8]
+	}
+	ac := &agentConn{
+		token:   token,
+		conn:    conn,
+		pending: make(map[string]chan protocol.Call),
+		info: AgentInfo{
+			TokenPrefix: prefix,
+			Online:      true,
+		},
+	}
 	r.mu.Lock()
 	r.agents[token] = ac
 	r.mu.Unlock()
 	return ac
+}
+
+// SetInfo updates metadata reported by an agent.
+func (r *Registry) SetInfo(token string, info AgentInfo) {
+	r.mu.RLock()
+	ac, ok := r.agents[token]
+	r.mu.RUnlock()
+	if !ok {
+		return
+	}
+	info.TokenPrefix = ac.info.TokenPrefix
+	info.Online = true
+	ac.info = info
+}
+
+// List returns currently connected agents.
+func (r *Registry) List() []AgentInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]AgentInfo, 0, len(r.agents))
+	for _, ac := range r.agents {
+		out = append(out, ac.info)
+	}
+	return out
 }
 
 // Unregister removes an agent connection.

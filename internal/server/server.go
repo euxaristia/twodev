@@ -74,6 +74,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		HTTPPort: s.opts.Config.HTTPPort,
 		Guard:    accessGuard,
 		Indexer:  s.opts.Indexer,
+		Agents:   s.agentServer.Registry(),
 	}).Register(mux)
 	githttp.NewHandler(s.opts.Paths.RepoRoot, accessGuard).Register(mux)
 	mux.Handle("/~server", s.agentServer)
