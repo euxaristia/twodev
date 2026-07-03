@@ -19,18 +19,22 @@ import (
 
 // Server is the twodev HTTP entrypoint with composed subsystems.
 type Server struct {
-	opts   Options
-	http   *http.Server
-	ssh    *sshserver.Server
-	queue  *scheduler.Queue
-	worker *scheduler.Worker
+	opts        Options
+	http        *http.Server
+	ssh         *sshserver.Server
+	queue       *scheduler.Queue
+	worker      *scheduler.Worker
+	agentServer *agentserver.Handler
 }
 
 // New creates a server from loaded options.
 func New(opts Options) *Server {
 	queue := scheduler.NewQueue()
+	agentRegistry := agentserver.NewRegistry()
+	agentHandler := agentserver.NewHandler(opts.AgentTokens, agentRegistry, opts.Logger)
 	runner := buildrunner.NewRunner(opts.Database, opts.Paths.RepoRoot, opts.Paths.WorkRoot, opts.Logger)
-	worker := scheduler.NewWorker(queue, runner.Handle)
+	dispatcher := buildrunner.NewDispatcher(opts.Database, agentRegistry, runner, opts.Logger)
+	worker := scheduler.NewWorker(queue, dispatcher.Handle)
 
 	var sshSrv *sshserver.Server
 	if opts.Config.SSHPort != nil {
@@ -41,10 +45,11 @@ func New(opts Options) *Server {
 	}
 
 	return &Server{
-		opts:   opts,
-		queue:  queue,
-		worker: worker,
-		ssh:    sshSrv,
+		opts:        opts,
+		queue:       queue,
+		worker:      worker,
+		ssh:         sshSrv,
+		agentServer: agentHandler,
 	}
 }
 
@@ -59,7 +64,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		HTTPPort: s.opts.Config.HTTPPort,
 	}).Register(mux)
 	githttp.NewHandler(s.opts.Paths.RepoRoot).Register(mux)
-	mux.Handle("/~server", agentserver.NewHandler(s.opts.AgentTokens, s.opts.Logger))
+	mux.Handle("/~server", s.agentServer)
 
 	addr := fmt.Sprintf("%s:%d", s.opts.Config.HTTPHost, s.opts.Config.HTTPPort)
 	s.http = &http.Server{
