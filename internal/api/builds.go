@@ -62,6 +62,9 @@ func (h *Handler) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
 			BuildNumber: created.Number,
 		})
 	}
+	if h.indexer != nil {
+		_ = h.indexer.IndexBuild(project.Path, created)
+	}
 	writeJSON(w, http.StatusCreated, created)
 }
 
