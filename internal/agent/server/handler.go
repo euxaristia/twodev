@@ -1,9 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/euxaristia/twodev/internal/agent/protocol"
 	"github.com/euxaristia/twodev/internal/auth"
@@ -11,36 +11,33 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// AgentRegistry tracks connected agents.
-type AgentRegistry struct {
-	mu     sync.RWMutex
-	agents map[string]*websocket.Conn
-}
-
-// NewAgentRegistry creates an empty registry.
-func NewAgentRegistry() *AgentRegistry {
-	return &AgentRegistry{agents: make(map[string]*websocket.Conn)}
-}
-
 // Handler serves the legacy /~server websocket endpoint.
 type Handler struct {
 	tokens   auth.TokenValidator
-	registry *AgentRegistry
+	registry *Registry
 	logger   *slog.Logger
 	upgrader websocket.Upgrader
 }
 
 // NewHandler creates an agent websocket handler.
-func NewHandler(tokens auth.TokenValidator, logger *slog.Logger) *Handler {
+func NewHandler(tokens auth.TokenValidator, registry *Registry, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if registry == nil {
+		registry = NewRegistry()
+	}
 	return &Handler{
 		tokens:   tokens,
-		registry: NewAgentRegistry(),
+		registry: registry,
 		logger:   logger,
 		upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }},
 	}
+}
+
+// Registry exposes connected agents for job dispatch.
+func (h *Handler) Registry() *Registry {
+	return h.registry
 }
 
 // ServeHTTP upgrades connections and speaks the OneDev agent protocol.
@@ -66,14 +63,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.registry.mu.Lock()
-	h.registry.agents[token] = conn
-	h.registry.mu.Unlock()
-	defer func() {
-		h.registry.mu.Lock()
-		delete(h.registry.agents, token)
-		h.registry.mu.Unlock()
-	}()
+	ac := h.registry.Register(token, conn)
+	defer h.registry.Unregister(token)
 
 	for {
 		_, frame, err := conn.ReadMessage()
@@ -86,12 +77,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch msg.Type {
 		case protocol.TypeAgentData:
-			h.logger.Info("agent connected", "token_prefix", token[:min(8, len(token))])
+			var info struct {
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(msg.Data, &info); err == nil && info.Name != "" {
+				h.logger.Info("agent connected", "name", info.Name, "token_prefix", token[:min(8, len(token))])
+			} else {
+				h.logger.Info("agent connected", "token_prefix", token[:min(8, len(token))])
+			}
+		case protocol.TypeResponse:
+			response, err := protocol.DecodeCall(msg.Data)
+			if err != nil {
+				h.logger.Error("invalid agent response", "error", err)
+				continue
+			}
+			h.registry.Complete(token, response)
 		case protocol.TypeLog:
 			h.logger.Info("job log", "payload", string(msg.Data))
 		default:
 			h.logger.Debug("agent message", "type", msg.Type.String())
 		}
+		_ = ac
 	}
 }
 

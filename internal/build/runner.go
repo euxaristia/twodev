@@ -84,6 +84,14 @@ func (r *Runner) Handle(ctx context.Context, req scheduler.JobRequest) error {
 }
 
 func (r *Runner) loadBuildSpec(ctx context.Context, projectPath, branch string) (*buildspec.BuildSpec, error) {
+	content, err := r.loadBuildSpecRaw(ctx, projectPath, branch)
+	if err != nil {
+		return nil, err
+	}
+	return buildspec.Parse(content)
+}
+
+func (r *Runner) loadBuildSpecRaw(ctx context.Context, projectPath, branch string) (string, error) {
 	repoDir := filepath.Join(r.repoRoot, projectPath+".git")
 	ref := strings.TrimSpace(branch)
 	if ref == "" {
@@ -91,9 +99,9 @@ func (r *Runner) loadBuildSpec(ctx context.Context, projectPath, branch string) 
 	}
 	content, err := r.git.ShowBlob(ctx, repoDir, ref, buildspec.BlobPath)
 	if err != nil {
-		return nil, fmt.Errorf("load %s from %s: %w", buildspec.BlobPath, projectPath, err)
+		return "", fmt.Errorf("load %s from %s: %w", buildspec.BlobPath, projectPath, err)
 	}
-	return buildspec.Parse(string(content))
+	return string(content), nil
 }
 
 func (r *Runner) failBuild(ctx context.Context, buildID int64, cause error) {

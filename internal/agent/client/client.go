@@ -99,16 +99,20 @@ func (c *Client) serveSession(ctx context.Context, conn *websocket.Conn) error {
 		}
 
 		switch msg.Type {
+		case protocol.TypeRequest:
+			if err := c.handleRequest(ctx, conn, msg.Data); err != nil {
+				return err
+			}
 		case protocol.TypeUpdate:
 			serverVersion := string(msg.Data)
 			c.logger.Info("server agent version", "version", serverVersion)
 			if serverVersion == version.Version {
 				if !registered {
-					c.logger.Warn(
-						"skipping AGENT_DATA registration until Java serialization bridge is implemented",
-						"twodev_version", version.Version,
-					)
+					if err := c.sendAgentData(conn); err != nil {
+						return err
+					}
 					registered = true
+					c.logger.Info("registered with server", "version", version.Version)
 				}
 			} else {
 				c.logger.Warn(
