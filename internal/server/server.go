@@ -42,10 +42,11 @@ func New(opts Options) *Server {
 	if opts.Config.SSHPort != nil {
 		var err error
 		sshSrv, err = sshserver.New(sshserver.Config{
-			Host:     opts.Config.HTTPHost,
-			Port:     *opts.Config.SSHPort,
-			RepoRoot: opts.Paths.RepoRoot,
-			HostKeyPath: filepath.Join(opts.Paths.SiteDir, "conf", "ssh_host_key"),
+			Host:           opts.Config.HTTPHost,
+			Port:           *opts.Config.SSHPort,
+			RepoRoot:       opts.Paths.RepoRoot,
+			HostKeyPath:    filepath.Join(opts.Paths.SiteDir, "conf", "ssh_host_key"),
+			AuthorizedKeys: opts.SSHAuthorizedKeys,
 		})
 		if err != nil {
 			opts.Logger.Warn("ssh server disabled", "error", err)

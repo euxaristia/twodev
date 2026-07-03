@@ -12,6 +12,7 @@ import (
 	"github.com/euxaristia/twodev/internal/config"
 	"github.com/euxaristia/twodev/internal/search"
 	"github.com/euxaristia/twodev/internal/store"
+	"golang.org/x/crypto/ssh"
 )
 
 // LoadConfigFromEnv loads server.properties from env or the OneDev default path.
@@ -31,8 +32,9 @@ type Options struct {
 	AgentTokens  auth.StaticTokens
 	AccessTokens auth.StaticTokens
 	SearchIndex  *search.Index
-	Indexer      *search.Indexer
-	Logger       *slog.Logger
+	Indexer          *search.Indexer
+	SSHAuthorizedKeys []ssh.PublicKey
+	Logger           *slog.Logger
 }
 
 // LoadOptionsFromEnv loads server.properties, opens the database, and resolves site paths.
@@ -76,6 +78,13 @@ func LoadOptionsFromEnv(logger *slog.Logger) (Options, error) {
 		_ = db.Close()
 		return Options{}, fmt.Errorf("open search index: %w", err)
 	}
+	sshKeys, err := config.LoadSSHAuthorizedKeys(paths.SiteDir)
+	if err != nil {
+		_ = searchIndex.Close()
+		_ = db.Close()
+		return Options{}, fmt.Errorf("load ssh authorized keys: %w", err)
+	}
+
 	indexer := search.NewIndexer(db, searchIndex)
 	if err := indexer.RebuildAll(context.Background()); err != nil {
 		_ = searchIndex.Close()
@@ -90,8 +99,9 @@ func LoadOptionsFromEnv(logger *slog.Logger) (Options, error) {
 		AgentTokens:  tokens,
 		AccessTokens: accessTokens,
 		SearchIndex:  searchIndex,
-		Indexer:      indexer,
-		Logger:       logger,
+		Indexer:           indexer,
+		SSHAuthorizedKeys: sshKeys,
+		Logger:            logger,
 	}, nil
 }
 
