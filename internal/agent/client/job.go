@@ -54,13 +54,16 @@ func (c *Client) runJob(ctx context.Context, conn *websocket.Conn, payload json.
 	loggerSub := logger.Subscribe()
 	go c.forwardLogs(conn, req.Token, loggerSub)
 
-	executor := job.NewExecutor(workRoot, logger)
+	executor := job.NewExecutorWithRepo(workRoot, req.RepoRoot, logger)
 	jobCtx := job.Context{
 		Token:       req.Token,
 		ProjectID:   req.ProjectID,
 		ProjectPath: req.ProjectPath,
 		BuildNumber: req.BuildNumber,
 		JobName:     req.JobName,
+		Branch:      req.Branch,
+		CommitHash:  req.CommitHash,
+		RepoRoot:    req.RepoRoot,
 		StartedAt:   time.Now().UTC(),
 	}
 	if err := executor.RunJob(ctx, spec, req.JobName, jobCtx); err != nil {

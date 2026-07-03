@@ -25,6 +25,8 @@ type RunJobPayload struct {
 	BuildNumber int    `json:"buildNumber"`
 	BuildSpec   string `json:"buildSpec"`
 	Branch      string `json:"branch"`
+	CommitHash  string `json:"commitHash"`
+	RepoRoot    string `json:"repoRoot"`
 }
 
 // RunJobResult reports agent-side job completion.

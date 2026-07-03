@@ -59,13 +59,16 @@ func (r *Runner) Handle(ctx context.Context, req scheduler.JobRequest) error {
 
 	token := fmt.Sprintf("build-%d-%s-%d", req.ProjectID, req.JobName, req.BuildNumber)
 	jobLogger := job.NewLogger(token, os.Stdout)
-	executor := job.NewExecutor(r.workRoot, jobLogger)
+	executor := job.NewExecutorWithRepo(r.workRoot, r.repoRoot, jobLogger)
 	jobCtx := job.Context{
 		Token:       token,
 		ProjectID:   req.ProjectID,
 		ProjectPath: req.ProjectPath,
 		BuildNumber: req.BuildNumber,
 		JobName:     req.JobName,
+		Branch:      build.Branch,
+		CommitHash:  build.CommitHash,
+		RepoRoot:    r.repoRoot,
 		StartedAt:   time.Now().UTC(),
 	}
 

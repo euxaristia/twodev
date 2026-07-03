@@ -25,6 +25,9 @@ type Context struct {
 	JobName       string
 	SubmitSequence int
 	WorkDir       string
+	Branch        string
+	CommitHash    string
+	RepoRoot      string
 	StartedAt     time.Time
 }
 
