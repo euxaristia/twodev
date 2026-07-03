@@ -26,6 +26,11 @@ type Service struct {
 	gitPath string
 }
 
+// GitPath returns the configured git executable path.
+func (s *Service) GitPath() string {
+	return s.gitPath
+}
+
 // NewService creates a git service using the given git executable.
 func NewService(gitPath string) *Service {
 	if strings.TrimSpace(gitPath) == "" {

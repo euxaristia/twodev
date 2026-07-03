@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	agentserver "github.com/euxaristia/twodev/internal/agent/server"
@@ -38,10 +39,17 @@ func New(opts Options) *Server {
 
 	var sshSrv *sshserver.Server
 	if opts.Config.SSHPort != nil {
-		sshSrv = sshserver.New(sshserver.Config{
-			Host: opts.Config.HTTPHost,
-			Port: *opts.Config.SSHPort,
+		var err error
+		sshSrv, err = sshserver.New(sshserver.Config{
+			Host:     opts.Config.HTTPHost,
+			Port:     *opts.Config.SSHPort,
+			RepoRoot: opts.Paths.RepoRoot,
+			HostKeyPath: filepath.Join(opts.Paths.SiteDir, "conf", "ssh_host_key"),
 		})
+		if err != nil {
+			opts.Logger.Warn("ssh server disabled", "error", err)
+			sshSrv = nil
+		}
 	}
 
 	return &Server{
