@@ -62,6 +62,23 @@ func (s *ProjectStore) Create(ctx context.Context, path, name, description strin
 	}, nil
 }
 
+// GetByID returns a project by id.
+func (s *ProjectStore) GetByID(ctx context.Context, id int64) (model.Project, error) {
+	var p model.Project
+	var created string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, path, name, description, created_at FROM projects WHERE id = ?`, id,
+	).Scan(&p.ID, &p.Path, &p.Name, &p.Description, &created)
+	if err == sql.ErrNoRows {
+		return model.Project{}, fmt.Errorf("project not found")
+	}
+	if err != nil {
+		return model.Project{}, err
+	}
+	p.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", created)
+	return p, nil
+}
+
 // GetByPath returns a project by path.
 func (s *ProjectStore) GetByPath(ctx context.Context, path string) (model.Project, error) {
 	var p model.Project
