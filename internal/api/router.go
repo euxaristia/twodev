@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	buildtrigger "github.com/euxaristia/twodev/internal/build"
 	"github.com/euxaristia/twodev/internal/buildspec"
+	"github.com/euxaristia/twodev/internal/git"
 	"github.com/euxaristia/twodev/internal/issue"
 	"github.com/euxaristia/twodev/internal/pullrequest"
 	"github.com/euxaristia/twodev/internal/scheduler"
@@ -21,22 +23,40 @@ type Handler struct {
 	issues   *issue.Service
 	pulls    *pullrequest.Service
 	queue    *scheduler.Queue
+	trigger  *buildtrigger.Trigger
+	repoRoot string
+	httpPort int
+	git      *git.Service
 	logger   *slog.Logger
 }
 
+// HandlerConfig configures optional git and build trigger integration.
+type HandlerConfig struct {
+	Queue    *scheduler.Queue
+	RepoRoot string
+	HTTPPort int
+}
+
 // NewHandler creates an API handler.
-func NewHandler(db *sql.DB, logger *slog.Logger, queue *scheduler.Queue) *Handler {
+func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{
+	h := &Handler{
 		projects: store.NewProjectStore(db),
 		builds:   store.NewBuildStore(db),
 		issues:   issue.NewService(db),
 		pulls:    pullrequest.NewService(db),
-		queue:    queue,
+		queue:    cfg.Queue,
+		repoRoot: cfg.RepoRoot,
+		httpPort: cfg.HTTPPort,
 		logger:   logger,
 	}
+	if cfg.Queue != nil && cfg.RepoRoot != "" {
+		h.trigger = buildtrigger.NewTrigger(db, cfg.RepoRoot, cfg.Queue, logger)
+		h.git = git.NewService("")
+	}
+	return h
 }
 
 // Register mounts routes on mux.
@@ -58,6 +78,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds", h.handleListBuilds)
 	mux.HandleFunc("POST /~api/twodev/projects/{id}/builds", h.handleCreateBuild)
 	mux.HandleFunc("GET /~api/twodev/projects/{id}/builds/{job}/{number}", h.handleGetBuild)
+
+	mux.HandleFunc("POST /~api/twodev/git/branch-update", h.handleBranchUpdate)
 }
 
 func (h *Handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
@@ -104,6 +126,9 @@ func (h *Handler) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if err := h.initProjectRepo(r, project.Path); err != nil {
+		h.logger.Error("init project repo failed", "path", project.Path, "error", err)
 	}
 	writeJSON(w, http.StatusCreated, project)
 }

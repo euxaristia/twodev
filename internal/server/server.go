@@ -53,7 +53,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 
-	api.NewHandler(s.opts.Database, s.opts.Logger, s.queue).Register(mux)
+	api.NewHandler(s.opts.Database, s.opts.Logger, api.HandlerConfig{
+		Queue:    s.queue,
+		RepoRoot: s.opts.Paths.RepoRoot,
+		HTTPPort: s.opts.Config.HTTPPort,
+	}).Register(mux)
 	githttp.NewHandler(s.opts.Paths.RepoRoot).Register(mux)
 	mux.Handle("/~server", agentserver.NewHandler(s.opts.AgentTokens, s.opts.Logger))
 

@@ -30,7 +30,7 @@ func TestCreateBuildEnqueuesJob(t *testing.T) {
 	queue := scheduler.NewQueue()
 	sub := queue.Subscribe()
 	mux := http.NewServeMux()
-	NewHandler(db, nil, queue).Register(mux)
+	NewHandler(db, nil, HandlerConfig{Queue: queue}).Register(mux)
 
 	id := strconv.FormatInt(project.ID, 10)
 	req := httptest.NewRequest(http.MethodPost, "/~api/twodev/projects/"+id+"/builds", bytes.NewBufferString(`{"jobName":"CI","branch":"main"}`))
