@@ -9,6 +9,7 @@ import (
 
 	agentserver "github.com/euxaristia/twodev/internal/agent/server"
 	"github.com/euxaristia/twodev/internal/api"
+	buildrunner "github.com/euxaristia/twodev/internal/build"
 	"github.com/euxaristia/twodev/internal/githttp"
 	"github.com/euxaristia/twodev/internal/scheduler"
 	"github.com/euxaristia/twodev/internal/sshserver"
@@ -28,15 +29,8 @@ type Server struct {
 // New creates a server from loaded options.
 func New(opts Options) *Server {
 	queue := scheduler.NewQueue()
-	worker := scheduler.NewWorker(queue, func(ctx context.Context, req scheduler.JobRequest) error {
-		opts.Logger.Info(
-			"job scheduled (executor wiring pending)",
-			"project", req.ProjectPath,
-			"job", req.JobName,
-			"build", req.BuildNumber,
-		)
-		return nil
-	})
+	runner := buildrunner.NewRunner(opts.Database, opts.Paths.RepoRoot, opts.Paths.WorkRoot, opts.Logger)
+	worker := scheduler.NewWorker(queue, runner.Handle)
 
 	var sshSrv *sshserver.Server
 	if opts.Config.SSHPort != nil {
@@ -59,7 +53,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 
-	api.NewHandler(s.opts.Database, s.opts.Logger).Register(mux)
+	api.NewHandler(s.opts.Database, s.opts.Logger, s.queue).Register(mux)
 	githttp.NewHandler(s.opts.Paths.RepoRoot).Register(mux)
 	mux.Handle("/~server", agentserver.NewHandler(s.opts.AgentTokens, s.opts.Logger))
 

@@ -16,4 +16,7 @@ func TestResolvePathsDefaults(t *testing.T) {
 	if paths.RepoRoot != filepath.Join("site", "repositories") {
 		t.Fatalf("repo root = %q", paths.RepoRoot)
 	}
+	if paths.WorkRoot != filepath.Join("site", "build-work") {
+		t.Fatalf("work root = %q", paths.WorkRoot)
+	}
 }

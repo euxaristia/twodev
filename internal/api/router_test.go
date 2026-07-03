@@ -27,7 +27,7 @@ func TestIssueAndBuildAPI(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(db, nil).Register(mux)
+	NewHandler(db, nil, nil).Register(mux)
 	id := strconv.FormatInt(project.ID, 10)
 
 	createIssue := httptest.NewRequest(http.MethodPost, "/~api/twodev/projects/"+id+"/issues", bytes.NewBufferString(`{"title":"Bug","state":"Open"}`))
