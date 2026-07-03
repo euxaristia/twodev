@@ -12,7 +12,6 @@ import (
 	"github.com/euxaristia/twodev/internal/config"
 	"github.com/euxaristia/twodev/internal/search"
 	"github.com/euxaristia/twodev/internal/store"
-	"golang.org/x/crypto/ssh"
 )
 
 // LoadConfigFromEnv loads server.properties from env or the OneDev default path.
@@ -33,8 +32,8 @@ type Options struct {
 	AccessTokens auth.StaticTokens
 	SearchIndex  *search.Index
 	Indexer          *search.Indexer
-	SSHAuthorizedKeys []ssh.PublicKey
-	Logger           *slog.Logger
+	SSHAuthorizedKeys config.SSHAuthorizedKeys
+	Logger            *slog.Logger
 }
 
 // LoadOptionsFromEnv loads server.properties, opens the database, and resolves site paths.

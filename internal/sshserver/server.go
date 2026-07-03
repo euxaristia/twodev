@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 
+	"github.com/euxaristia/twodev/internal/config"
 	"github.com/euxaristia/twodev/internal/git"
 	"golang.org/x/crypto/ssh"
 )
@@ -17,7 +18,7 @@ type Config struct {
 	Port        int
 	RepoRoot       string
 	HostKeyPath    string
-	AuthorizedKeys []ssh.PublicKey
+	AuthorizedKeys config.SSHAuthorizedKeys
 }
 
 // Server serves git commands over SSH.

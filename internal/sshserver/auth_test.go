@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"testing"
 
+	"github.com/euxaristia/twodev/internal/config"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -12,7 +13,10 @@ func TestPublicKeyCallback(t *testing.T) {
 	allowed := mustSigner(t)
 	other := mustSigner(t)
 
-	callback := publicKeyCallback([]ssh.PublicKey{allowed.PublicKey()})
+	callback := publicKeyCallback(config.SSHAuthorizedKeys{
+		Enforce: true,
+		Keys:    []ssh.PublicKey{allowed.PublicKey()},
+	})
 	if _, err := callback(nil, allowed.PublicKey()); err != nil {
 		t.Fatalf("allowed key rejected: %v", err)
 	}
@@ -21,11 +25,19 @@ func TestPublicKeyCallback(t *testing.T) {
 	}
 }
 
-func TestPublicKeyCallbackAllowsAllWhenEmpty(t *testing.T) {
+func TestPublicKeyCallbackAllowsAllWhenNotEnforced(t *testing.T) {
 	pub := mustSigner(t).PublicKey()
-	callback := publicKeyCallback(nil)
+	callback := publicKeyCallback(config.SSHAuthorizedKeys{})
 	if _, err := callback(nil, pub); err != nil {
 		t.Fatalf("expected open auth, got %v", err)
+	}
+}
+
+func TestPublicKeyCallbackDeniesWhenEnforcedAndEmpty(t *testing.T) {
+	pub := mustSigner(t).PublicKey()
+	callback := publicKeyCallback(config.SSHAuthorizedKeys{Enforce: true})
+	if _, err := callback(nil, pub); err == nil {
+		t.Fatal("expected deny when authorized_keys exists but is empty")
 	}
 }
 
