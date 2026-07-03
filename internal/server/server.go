@@ -2,40 +2,68 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/euxaristia/twodev/internal/config"
+	agentserver "github.com/euxaristia/twodev/internal/agent/server"
+	"github.com/euxaristia/twodev/internal/api"
+	"github.com/euxaristia/twodev/internal/githttp"
+	"github.com/euxaristia/twodev/internal/scheduler"
+	"github.com/euxaristia/twodev/internal/sshserver"
 	"github.com/euxaristia/twodev/internal/version"
+	"golang.org/x/sync/errgroup"
 )
 
-// Server is the twodev HTTP entrypoint.
+// Server is the twodev HTTP entrypoint with composed subsystems.
 type Server struct {
-	cfg    config.Server
-	logger *slog.Logger
+	opts   Options
 	http   *http.Server
+	ssh    *sshserver.Server
+	queue  *scheduler.Queue
+	worker *scheduler.Worker
 }
 
-// New creates a server from server.properties-backed config.
-func New(cfg config.Server, logger *slog.Logger) *Server {
-	if logger == nil {
-		logger = slog.Default()
+// New creates a server from loaded options.
+func New(opts Options) *Server {
+	queue := scheduler.NewQueue()
+	worker := scheduler.NewWorker(queue, func(ctx context.Context, req scheduler.JobRequest) error {
+		opts.Logger.Info(
+			"job scheduled (executor wiring pending)",
+			"project", req.ProjectPath,
+			"job", req.JobName,
+			"build", req.BuildNumber,
+		)
+		return nil
+	})
+
+	var sshSrv *sshserver.Server
+	if opts.Config.SSHPort != nil {
+		sshSrv = sshserver.New(sshserver.Config{
+			Host: opts.Config.HTTPHost,
+			Port: *opts.Config.SSHPort,
+		})
 	}
-	return &Server{cfg: cfg, logger: logger}
+
+	return &Server{
+		opts:   opts,
+		queue:  queue,
+		worker: worker,
+		ssh:    sshSrv,
+	}
 }
 
-// ListenAndServe starts the HTTP server until ctx is canceled.
+// ListenAndServe starts HTTP, optional SSH, and background workers until ctx is canceled.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.HandleFunc("GET /~api/twodev/version", s.handleVersion)
+	mux.HandleFunc("GET /healthz", handleHealth)
 
-	addr := fmt.Sprintf("%s:%d", s.cfg.HTTPHost, s.cfg.HTTPPort)
+	api.NewHandler(s.opts.Database, s.opts.Logger).Register(mux)
+	githttp.NewHandler(s.opts.Paths.RepoRoot).Register(mux)
+	mux.Handle("/~server", agentserver.NewHandler(s.opts.AgentTokens, s.opts.Logger))
+
+	addr := fmt.Sprintf("%s:%d", s.opts.Config.HTTPHost, s.opts.Config.HTTPPort)
 	s.http = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -45,47 +73,55 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("twodev listening", "addr", addr, "version", version.Version)
-		errCh <- s.http.ListenAndServe()
-	}()
+	g, ctx := errgroup.WithContext(ctx)
 
-	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return errors.Join(ctx.Err(), s.http.Shutdown(shutdownCtx))
-	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+	g.Go(func() error {
+		s.opts.Logger.Info("twodev listening", "addr", addr, "version", version.Version)
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.http.ListenAndServe()
+		}()
+
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			return s.http.Shutdown(shutdownCtx)
+		case err := <-errCh:
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
+			}
+			return err
 		}
-		return err
-	}
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"name":    version.Name,
-		"version": version.Version,
 	})
-}
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-// LoadConfigFromEnv loads server.properties from env or the OneDev default path.
-func LoadConfigFromEnv() (config.Server, error) {
-	path := os.Getenv("TWODEV_SERVER_PROPERTIES")
-	if path == "" {
-		path = "server-product/system/conf/server.properties"
+	if s.ssh != nil {
+		g.Go(func() error {
+			s.opts.Logger.Info("ssh listening", "addr", fmt.Sprintf("%s:%d", s.opts.Config.HTTPHost, *s.opts.Config.SSHPort))
+			if err := s.ssh.ListenAndServe(ctx); err != nil && ctx.Err() == nil {
+				return err
+			}
+			return nil
+		})
 	}
-	return config.LoadServer(path)
+
+	g.Go(func() error {
+		if err := s.worker.Run(ctx); err != nil && ctx.Err() == nil {
+			return err
+		}
+		return nil
+	})
+
+	return g.Wait()
+}
+
+// JobQueue exposes the in-memory scheduler for git hooks and triggers.
+func (s *Server) JobQueue() *scheduler.Queue {
+	return s.queue
+}
+
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }

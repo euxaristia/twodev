@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,18 +13,25 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
-	cfg, err := server.LoadConfigFromEnv()
-	if err != nil {
-		logger.Error("load server config", "error", err)
+	if err := run(logger); err != nil {
+		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func run(logger *slog.Logger) error {
+	opts, err := server.LoadOptionsFromEnv(logger)
+	if err != nil {
+		return err
+	}
+	defer opts.Database.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := server.New(cfg, logger).ListenAndServe(ctx); err != nil {
-		logger.Error("server stopped", "error", err)
-		os.Exit(1)
+	err = server.New(opts).ListenAndServe(ctx)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return err
 	}
+	return nil
 }
