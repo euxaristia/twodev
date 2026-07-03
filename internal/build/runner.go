@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/euxaristia/twodev/internal/buildspec"
+	"github.com/euxaristia/twodev/internal/model"
 	"github.com/euxaristia/twodev/internal/git"
 	"github.com/euxaristia/twodev/internal/job"
 	"github.com/euxaristia/twodev/internal/scheduler"
+	"github.com/euxaristia/twodev/internal/search"
 	"github.com/euxaristia/twodev/internal/store"
 )
 
@@ -23,11 +25,12 @@ type Runner struct {
 	repoRoot string
 	workRoot string
 	git      *git.Service
+	indexer  *search.Indexer
 	logger   *slog.Logger
 }
 
 // NewRunner creates a build runner.
-func NewRunner(db *sql.DB, repoRoot, workRoot string, logger *slog.Logger) *Runner {
+func NewRunner(db *sql.DB, repoRoot, workRoot string, indexer *search.Indexer, logger *slog.Logger) *Runner {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -36,6 +39,7 @@ func NewRunner(db *sql.DB, repoRoot, workRoot string, logger *slog.Logger) *Runn
 		repoRoot: repoRoot,
 		workRoot: workRoot,
 		git:      git.NewService(""),
+		indexer:  indexer,
 		logger:   logger,
 	}
 }
@@ -47,13 +51,13 @@ func (r *Runner) Handle(ctx context.Context, req scheduler.JobRequest) error {
 		return err
 	}
 
-	if err := r.builds.UpdateStatus(ctx, build.ID, store.BuildStatusRunning, false); err != nil {
+	if err := r.updateBuildStatus(ctx, req.ProjectPath, build, store.BuildStatusRunning, false); err != nil {
 		return err
 	}
 
 	spec, err := r.loadBuildSpec(ctx, req.ProjectPath, build.Branch)
 	if err != nil {
-		r.failBuild(ctx, build.ID, err)
+		r.failBuild(ctx, req.ProjectPath, build, err)
 		return err
 	}
 
@@ -80,10 +84,21 @@ func (r *Runner) Handle(ctx context.Context, req scheduler.JobRequest) error {
 	} else {
 		r.logger.Info("build finished", "project", req.ProjectPath, "job", req.JobName, "build", req.BuildNumber, "status", status)
 	}
-	if err := r.builds.UpdateStatus(ctx, build.ID, status, true); err != nil {
+	if err := r.updateBuildStatus(ctx, req.ProjectPath, build, status, true); err != nil {
 		return err
 	}
 	return runErr
+}
+
+func (r *Runner) updateBuildStatus(ctx context.Context, projectPath string, build model.Build, status string, finished bool) error {
+	if err := r.builds.UpdateStatus(ctx, build.ID, status, finished); err != nil {
+		return err
+	}
+	build.Status = status
+	if r.indexer != nil {
+		_ = r.indexer.IndexBuild(projectPath, build)
+	}
+	return nil
 }
 
 func (r *Runner) loadBuildSpec(ctx context.Context, projectPath, branch string) (*buildspec.BuildSpec, error) {
@@ -107,7 +122,7 @@ func (r *Runner) loadBuildSpecRaw(ctx context.Context, projectPath, branch strin
 	return string(content), nil
 }
 
-func (r *Runner) failBuild(ctx context.Context, buildID int64, cause error) {
-	r.logger.Error("build aborted", "buildId", buildID, "error", cause)
-	_ = r.builds.UpdateStatus(ctx, buildID, store.BuildStatusFailed, true)
+func (r *Runner) failBuild(ctx context.Context, projectPath string, build model.Build, cause error) {
+	r.logger.Error("build aborted", "buildId", build.ID, "error", cause)
+	_ = r.updateBuildStatus(ctx, projectPath, build, store.BuildStatusFailed, true)
 }

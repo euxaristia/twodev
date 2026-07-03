@@ -48,7 +48,7 @@ func TestRunnerExecutesQueuedBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runner := NewRunner(db, repoRoot, workRoot, nil)
+	runner := NewRunner(db, repoRoot, workRoot, nil, nil)
 	req := scheduler.JobRequest{
 		ProjectID:   project.ID,
 		ProjectPath: project.Path,

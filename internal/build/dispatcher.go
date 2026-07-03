@@ -53,13 +53,13 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 	if err != nil {
 		return err
 	}
-	if err := d.builds.UpdateStatus(ctx, build.ID, store.BuildStatusRunning, false); err != nil {
+	if err := d.local.updateBuildStatus(ctx, req.ProjectPath, build, store.BuildStatusRunning, false); err != nil {
 		return err
 	}
 
 	specYAML, err := d.local.loadBuildSpecRaw(ctx, req.ProjectPath, build.Branch)
 	if err != nil {
-		d.local.failBuild(ctx, build.ID, err)
+		d.local.failBuild(ctx, req.ProjectPath, build, err)
 		return err
 	}
 
@@ -76,7 +76,7 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 		RepoRoot:    d.local.repoRoot,
 	})
 	if err != nil {
-		d.local.failBuild(ctx, build.ID, err)
+		d.local.failBuild(ctx, req.ProjectPath, build, err)
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 		}
 		d.logger.Info("agent build finished", "project", req.ProjectPath, "job", req.JobName, "build", req.BuildNumber, "status", status)
 	}
-	if updateErr := d.builds.UpdateStatus(ctx, build.ID, status, true); updateErr != nil {
+	if updateErr := d.local.updateBuildStatus(ctx, req.ProjectPath, build, status, true); updateErr != nil {
 		return updateErr
 	}
 	return err

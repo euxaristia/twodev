@@ -34,7 +34,7 @@ func New(opts Options) *Server {
 	queue := scheduler.NewQueue()
 	agentRegistry := agentserver.NewRegistry()
 	agentHandler := agentserver.NewHandler(opts.AgentTokens, agentRegistry, opts.Logger)
-	runner := buildrunner.NewRunner(opts.Database, opts.Paths.RepoRoot, opts.Paths.WorkRoot, opts.Logger)
+	runner := buildrunner.NewRunner(opts.Database, opts.Paths.RepoRoot, opts.Paths.WorkRoot, opts.Indexer, opts.Logger)
 	dispatcher := buildrunner.NewDispatcher(opts.Database, agentRegistry, runner, opts.Logger)
 	worker := scheduler.NewWorker(queue, dispatcher.Handle)
 
