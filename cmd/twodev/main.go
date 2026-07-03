@@ -25,6 +25,9 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	defer opts.Database.Close()
+	if opts.SearchIndex != nil {
+		defer opts.SearchIndex.Close()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

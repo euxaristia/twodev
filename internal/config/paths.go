@@ -11,6 +11,7 @@ type Paths struct {
 	DatabasePath string
 	RepoRoot     string
 	WorkRoot     string
+	SearchIndex  string
 }
 
 // ResolvePaths returns runtime paths for the given site directory.
@@ -23,6 +24,7 @@ func ResolvePaths(siteDir string) Paths {
 		DatabasePath: filepath.Join(siteDir, "database", "twodev.db"),
 		RepoRoot:     filepath.Join(siteDir, "repositories"),
 		WorkRoot:     filepath.Join(siteDir, "build-work"),
+		SearchIndex:  filepath.Join(siteDir, "index", "search.bleve"),
 	}
 }
 

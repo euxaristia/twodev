@@ -13,6 +13,7 @@ import (
 	"github.com/euxaristia/twodev/internal/issue"
 	"github.com/euxaristia/twodev/internal/pullrequest"
 	"github.com/euxaristia/twodev/internal/scheduler"
+	"github.com/euxaristia/twodev/internal/search"
 	"github.com/euxaristia/twodev/internal/store"
 	"github.com/euxaristia/twodev/internal/version"
 )
@@ -29,6 +30,7 @@ type Handler struct {
 	httpPort int
 	git      *git.Service
 	guard    *auth.Guard
+	indexer  *search.Indexer
 	logger   *slog.Logger
 }
 
@@ -38,6 +40,7 @@ type HandlerConfig struct {
 	RepoRoot string
 	HTTPPort int
 	Guard    *auth.Guard
+	Indexer  *search.Indexer
 }
 
 // NewHandler creates an API handler.
@@ -54,6 +57,7 @@ func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 		repoRoot: cfg.RepoRoot,
 		httpPort: cfg.HTTPPort,
 		guard:    cfg.Guard,
+		indexer:  cfg.Indexer,
 		logger:   logger,
 	}
 	if cfg.Queue != nil && cfg.RepoRoot != "" {
@@ -67,6 +71,7 @@ func NewHandler(db *sql.DB, logger *slog.Logger, cfg HandlerConfig) *Handler {
 func (h *Handler) Register(mux *http.ServeMux) {
 	h.route(mux, "GET /~api/twodev/version", h.handleVersion)
 	h.route(mux, "POST /~api/twodev/buildspec/validate", h.handleValidateBuildSpec)
+	h.route(mux, "GET /~api/twodev/search", h.handleSearch)
 	h.route(mux, "GET /~api/twodev/projects", h.handleListProjects)
 	h.route(mux, "POST /~api/twodev/projects", h.handleCreateProject)
 	h.route(mux, "GET /~api/twodev/projects/{id}", h.handleGetProject)
@@ -133,6 +138,9 @@ func (h *Handler) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.initProjectRepo(r, project.Path); err != nil {
 		h.logger.Error("init project repo failed", "path", project.Path, "error", err)
+	}
+	if h.indexer != nil {
+		_ = h.indexer.IndexProject(project)
 	}
 	writeJSON(w, http.StatusCreated, project)
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search"
 )
 
 // Index wraps a Bleve full-text index for code and entity search.
@@ -42,22 +43,40 @@ func (i *Index) IndexDocument(doc Document) error {
 	return i.index.Index(doc.ID, doc)
 }
 
-// Search performs a simple query across indexed documents.
-func (i *Index) Search(query string, limit int) ([]string, error) {
+// SearchDocuments performs a query and returns matching documents.
+func (i *Index) SearchDocuments(query string, limit int) ([]Document, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	req := bleve.NewSearchRequest(bleve.NewQueryStringQuery(query))
 	req.Size = limit
+	req.Fields = []string{"*"}
 	result, err := i.index.Search(req)
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, 0, len(result.Hits))
+	docs := make([]Document, 0, len(result.Hits))
 	for _, hit := range result.Hits {
-		ids = append(ids, hit.ID)
+		docs = append(docs, documentFromHit(hit))
 	}
-	return ids, nil
+	return docs, nil
+}
+
+func documentFromHit(hit *search.DocumentMatch) Document {
+	doc := Document{ID: hit.ID}
+	if v, ok := hit.Fields["Type"].(string); ok {
+		doc.Type = v
+	}
+	if v, ok := hit.Fields["Project"].(string); ok {
+		doc.Project = v
+	}
+	if v, ok := hit.Fields["Title"].(string); ok {
+		doc.Title = v
+	}
+	if v, ok := hit.Fields["Body"].(string); ok {
+		doc.Body = v
+	}
+	return doc
 }
 
 // Close closes the index.

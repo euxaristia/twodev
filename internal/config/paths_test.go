@@ -19,4 +19,7 @@ func TestResolvePathsDefaults(t *testing.T) {
 	if paths.WorkRoot != filepath.Join("site", "build-work") {
 		t.Fatalf("work root = %q", paths.WorkRoot)
 	}
+	if paths.SearchIndex != filepath.Join("site", "index", "search.bleve") {
+		t.Fatalf("search index = %q", paths.SearchIndex)
+	}
 }
