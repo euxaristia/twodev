@@ -28,10 +28,10 @@ type Server struct {
 
 // Agent holds OneDev-compatible agent.properties settings.
 type Agent struct {
-	ServerURL string
-	Token     string
-	Name      string
-	GitPath   string
+	ServerURL  string
+	Token      string
+	Name       string
+	GitPath    string
 	DockerPath string
 }
 
@@ -42,12 +42,21 @@ func LoadServer(path string) (Server, error) {
 		return Server{}, err
 	}
 
+	httpPort, err := getInt(values, "http_port", DefaultHTTPPort)
+	if err != nil {
+		return Server{}, fmt.Errorf("parse http_port: %w", err)
+	}
+	clusterPort, err := getInt(values, "cluster_port", DefaultClusterPort)
+	if err != nil {
+		return Server{}, fmt.Errorf("parse cluster_port: %w", err)
+	}
+
 	cfg := Server{
 		HTTPHost:    getString(values, "http_host", DefaultHTTPHost),
-		HTTPPort:    getInt(values, "http_port", DefaultHTTPPort),
+		HTTPPort:    httpPort,
 		ServerName:  getString(values, "server_name", ""),
 		ClusterIP:   getString(values, "cluster_ip", ""),
-		ClusterPort: getInt(values, "cluster_port", DefaultClusterPort),
+		ClusterPort: clusterPort,
 	}
 	if raw, ok := values["ssh_port"]; ok && strings.TrimSpace(raw) != "" {
 		port, err := strconv.Atoi(strings.TrimSpace(raw))
@@ -115,14 +124,14 @@ func getString(values map[string]string, key, fallback string) string {
 	return fallback
 }
 
-func getInt(values map[string]string, key string, fallback int) int {
+func getInt(values map[string]string, key string, fallback int) (int, error) {
 	raw, ok := values[key]
 	if !ok || strings.TrimSpace(raw) == "" {
-		return fallback
+		return fallback, nil
 	}
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
-		return fallback
+		return 0, err
 	}
-	return value
+	return value, nil
 }

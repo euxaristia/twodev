@@ -37,6 +37,17 @@ cluster_port=6000
 	}
 }
 
+func TestLoadServerRejectsMalformedPort(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.properties")
+	if err := os.WriteFile(path, []byte("http_port=not-a-number\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadServer(path); err == nil {
+		t.Fatal("expected error for malformed http_port")
+	}
+}
+
 func TestLoadAgentRequiresFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agent.properties")
