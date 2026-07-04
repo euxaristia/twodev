@@ -35,7 +35,7 @@ func New(opts Options) *Server {
 	agentRegistry := agentserver.NewRegistry()
 	agentHandler := agentserver.NewHandler(opts.AgentTokens, agentRegistry, opts.Logger)
 	runner := buildrunner.NewRunner(opts.Database, opts.Paths.RepoRoot, opts.Paths.WorkRoot, opts.Indexer, opts.Logger)
-	dispatcher := buildrunner.NewDispatcher(opts.Database, agentRegistry, runner, opts.Logger)
+	dispatcher := buildrunner.NewDispatcher(opts.Database, agentRegistry, runner, opts.Config, opts.Logger)
 	worker := scheduler.NewWorker(queue, dispatcher.Handle)
 
 	var sshSrv *sshserver.Server

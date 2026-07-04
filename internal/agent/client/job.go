@@ -64,6 +64,7 @@ func (c *Client) runJob(ctx context.Context, conn *websocket.Conn, payload json.
 		Branch:      req.Branch,
 		CommitHash:  req.CommitHash,
 		RepoRoot:    req.RepoRoot,
+		CloneURL:    req.CloneURL,
 		StartedAt:   time.Now().UTC(),
 	}
 	if err := executor.RunJob(ctx, spec, req.JobName, jobCtx); err != nil {

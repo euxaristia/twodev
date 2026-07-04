@@ -76,16 +76,15 @@ func (e *Executor) runStep(ctx context.Context, jobCtx Context, step buildspec.S
 }
 
 func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step buildspec.Step) error {
-	repoRoot := jobCtx.RepoRoot
-	if repoRoot == "" {
-		return fmt.Errorf("checkout requires repo root")
+	cloneURL, err := e.checkoutSource(jobCtx)
+	if err != nil {
+		return err
 	}
 	checkoutPath := "work"
 	if raw, ok := step.Fields["checkoutPath"].(string); ok && strings.TrimSpace(raw) != "" {
 		checkoutPath = strings.TrimSpace(raw)
 	}
 	dest := filepath.Join(jobCtx.WorkDir, checkoutPath)
-	repoDir := filepath.Join(repoRoot, jobCtx.ProjectPath+".git")
 
 	depth := 0
 	if raw, ok := step.Fields["cloneDepth"].(int); ok && raw > 0 {
@@ -99,7 +98,7 @@ func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step bui
 
 	e.logger.Log(fmt.Sprintf("cloning %s into %s", jobCtx.ProjectPath, dest))
 	if err := e.git.Clone(ctx, git.CloneOptions{
-		URL:            repoDir,
+		URL:            cloneURL,
 		Branch:         jobCtx.Branch,
 		Depth:          depth,
 		WithLFS:        withLfs,
@@ -112,6 +111,24 @@ func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step bui
 		return e.git.Checkout(ctx, dest, jobCtx.CommitHash)
 	}
 	return nil
+}
+
+func (e *Executor) checkoutSource(jobCtx Context) (string, error) {
+	if jobCtx.CloneURL != "" {
+		return jobCtx.CloneURL, nil
+	}
+	repoRoot := jobCtx.RepoRoot
+	if repoRoot == "" {
+		repoRoot = e.repoRoot
+	}
+	if repoRoot == "" {
+		return "", fmt.Errorf("checkout requires repo root or clone URL")
+	}
+	repoDir := filepath.Join(repoRoot, jobCtx.ProjectPath+".git")
+	if _, err := os.Stat(repoDir); err != nil {
+		return "", fmt.Errorf("local repository not found at %s", repoDir)
+	}
+	return repoDir, nil
 }
 
 func (e *Executor) runCommandStep(ctx context.Context, jobCtx Context, step buildspec.Step) error {

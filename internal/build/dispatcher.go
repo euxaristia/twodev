@@ -11,28 +11,32 @@ import (
 
 	"github.com/euxaristia/twodev/internal/agent/protocol"
 	agentserver "github.com/euxaristia/twodev/internal/agent/server"
+	"github.com/euxaristia/twodev/internal/config"
+	"github.com/euxaristia/twodev/internal/git"
 	"github.com/euxaristia/twodev/internal/scheduler"
 	"github.com/euxaristia/twodev/internal/store"
 )
 
 // Dispatcher routes queued builds to connected agents, falling back to local execution.
 type Dispatcher struct {
-	builds   *store.BuildStore
-	registry *agentserver.Registry
-	local    *Runner
-	logger   *slog.Logger
+	builds     *store.BuildStore
+	registry   *agentserver.Registry
+	local      *Runner
+	serverCfg  config.Server
+	logger     *slog.Logger
 }
 
 // NewDispatcher creates a build dispatcher.
-func NewDispatcher(db *sql.DB, registry *agentserver.Registry, local *Runner, logger *slog.Logger) *Dispatcher {
+func NewDispatcher(db *sql.DB, registry *agentserver.Registry, local *Runner, serverCfg config.Server, logger *slog.Logger) *Dispatcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Dispatcher{
-		builds:   store.NewBuildStore(db),
-		registry: registry,
-		local:    local,
-		logger:   logger,
+		builds:    store.NewBuildStore(db),
+		registry:  registry,
+		local:     local,
+		serverCfg: serverCfg,
+		logger:    logger,
 	}
 }
 
@@ -64,6 +68,7 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 	}
 
 	token := fmt.Sprintf("build-%d-%s-%d", req.ProjectID, req.JobName, req.BuildNumber)
+	cloneURL := git.ProjectCloneURL(d.serverCfg.ServerName, d.serverCfg.HTTPHost, d.serverCfg.HTTPPort, req.ProjectPath)
 	payload, err := json.Marshal(protocol.RunJobPayload{
 		Token:       token,
 		ProjectID:   req.ProjectID,
@@ -73,7 +78,7 @@ func (d *Dispatcher) dispatchToAgent(ctx context.Context, req scheduler.JobReque
 		BuildSpec:   specYAML,
 		Branch:      build.Branch,
 		CommitHash:  build.CommitHash,
-		RepoRoot:    d.local.repoRoot,
+		CloneURL:    cloneURL,
 	})
 	if err != nil {
 		d.local.failBuild(ctx, req.ProjectPath, build, err)

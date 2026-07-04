@@ -70,13 +70,14 @@ func (s *Service) Checkout(ctx context.Context, repoDir, ref string) error {
 }
 
 // AdvertiseRefs returns pkt-line ref advertisement for the given service.
-func (s *Service) AdvertiseRefs(ctx context.Context, repoDir, service string) ([]byte, error) {
+// protocol is the Git-Protocol header value (e.g. "version=2"); pass empty for default.
+func (s *Service) AdvertiseRefs(ctx context.Context, repoDir, service, protocol string) ([]byte, error) {
 	command, err := gitRPCCommand(service)
 	if err != nil {
 		return nil, err
 	}
-	args := []string{"-C", repoDir, command, "--advertise-refs", "."}
-	out, err := s.output(ctx, "", args...)
+	args := []string{"-C", repoDir, command, "--stateless-rpc", "--advertise-refs", "."}
+	out, err := s.outputWithEnv(ctx, "", protocolEnv(protocol), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,13 +85,13 @@ func (s *Service) AdvertiseRefs(ctx context.Context, repoDir, service string) ([
 }
 
 // UploadPack runs stateless RPC upload-pack, streaming request and response.
-func (s *Service) UploadPack(ctx context.Context, repoDir string, request io.Reader, response io.Writer) error {
-	return s.statelessRPC(ctx, repoDir, "upload-pack", request, response)
+func (s *Service) UploadPack(ctx context.Context, repoDir, protocol string, request io.Reader, response io.Writer) error {
+	return s.statelessRPC(ctx, repoDir, "upload-pack", protocol, request, response)
 }
 
 // ReceivePack runs stateless RPC receive-pack, streaming request and response.
-func (s *Service) ReceivePack(ctx context.Context, repoDir string, request io.Reader, response io.Writer) error {
-	return s.statelessRPC(ctx, repoDir, "receive-pack", request, response)
+func (s *Service) ReceivePack(ctx context.Context, repoDir, protocol string, request io.Reader, response io.Writer) error {
+	return s.statelessRPC(ctx, repoDir, "receive-pack", protocol, request, response)
 }
 
 // Run executes git with args in dir.
@@ -127,12 +128,15 @@ func gitRPCCommand(service string) (string, error) {
 	}
 }
 
-func (s *Service) statelessRPC(ctx context.Context, repoDir, command string, request io.Reader, response io.Writer) error {
+func (s *Service) statelessRPC(ctx context.Context, repoDir, command, protocol string, request io.Reader, response io.Writer) error {
 	cmd := exec.CommandContext(ctx, s.gitPath, "-C", repoDir, command, "--stateless-rpc", ".")
 	cmd.Stdin = request
 	cmd.Stdout = response
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	if env := protocolEnv(protocol); len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			return fmt.Errorf("%s: %s", command, msg)
@@ -140,6 +144,14 @@ func (s *Service) statelessRPC(ctx context.Context, repoDir, command string, req
 		return err
 	}
 	return nil
+}
+
+func protocolEnv(protocol string) []string {
+	protocol = strings.TrimSpace(protocol)
+	if protocol == "" {
+		return nil
+	}
+	return []string{"GIT_PROTOCOL=" + protocol}
 }
 
 // Version returns the installed git version string.
@@ -163,8 +175,15 @@ func (s *Service) run(ctx context.Context, dir string, args ...string) error {
 }
 
 func (s *Service) output(ctx context.Context, dir string, args ...string) (string, error) {
+	return s.outputWithEnv(ctx, dir, nil, args...)
+}
+
+func (s *Service) outputWithEnv(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, s.gitPath, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

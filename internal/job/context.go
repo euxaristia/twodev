@@ -28,6 +28,7 @@ type Context struct {
 	Branch        string
 	CommitHash    string
 	RepoRoot      string
+	CloneURL      string
 	StartedAt     time.Time
 }
 

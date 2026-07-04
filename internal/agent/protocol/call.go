@@ -27,6 +27,7 @@ type RunJobPayload struct {
 	Branch      string `json:"branch"`
 	CommitHash  string `json:"commitHash"`
 	RepoRoot    string `json:"repoRoot"`
+	CloneURL    string `json:"cloneUrl,omitempty"`
 }
 
 // RunJobResult reports agent-side job completion.
