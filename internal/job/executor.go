@@ -76,7 +76,7 @@ func (e *Executor) runStep(ctx context.Context, jobCtx Context, step buildspec.S
 }
 
 func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step buildspec.Step) error {
-	cloneURL, err := e.checkoutSource(jobCtx)
+	cloneSource, err := e.checkoutSource(jobCtx)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func (e *Executor) runCheckoutStep(ctx context.Context, jobCtx Context, step bui
 
 	e.logger.Log(fmt.Sprintf("cloning %s into %s", jobCtx.ProjectPath, dest))
 	if err := e.git.Clone(ctx, git.CloneOptions{
-		URL:            cloneURL,
+		URL:            cloneSource,
 		Branch:         jobCtx.Branch,
 		Depth:          depth,
 		WithLFS:        withLfs,

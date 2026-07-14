@@ -20,11 +20,18 @@ func TestProjectCloneURL(t *testing.T) {
 			want:        "http://dev.example.com:6610/demo.git",
 		},
 		{
-			name:        "bind all maps to localhost",
+			name:        "bind all is unreachable",
 			httpHost:    "0.0.0.0",
 			httpPort:    8080,
 			projectPath: "demo/agent",
-			want:        "http://127.0.0.1:8080/demo/agent.git",
+			want:        "",
+		},
+		{
+			name:        "empty host is unreachable",
+			httpHost:    "",
+			httpPort:    8080,
+			projectPath: "demo/agent",
+			want:        "",
 		},
 		{
 			name:        "explicit host",

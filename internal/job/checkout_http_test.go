@@ -51,7 +51,7 @@ jobs:
     interpreter:
       type: DefaultInterpreter
       commands: |
-        type readme.txt
+        cat readme.txt
 `)
 	if err != nil {
 		t.Fatal(err)
