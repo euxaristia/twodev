@@ -1,9 +1,11 @@
-# CodeRabbit config for twodev stacked Go rewrite PRs.
-# Stacked PRs target go/* branches, not main. Without base_branches, every
-# PR after #1 gets "Review skipped" noise.
+# CodeRabbit merge gate for twodev.
 reviews:
+  request_changes_workflow: true
+  fail_commit_status: true
+  commit_status: true
   auto_review:
     base_branches:
+      - "main"
       - "go/.*"
   path_filters:
     - "!terminals/**"
