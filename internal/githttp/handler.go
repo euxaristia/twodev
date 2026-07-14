@@ -87,17 +87,17 @@ func (h *Handler) handleInfoRefs(w http.ResponseWriter, r *http.Request, project
 		http.Error(w, "repository not found", http.StatusNotFound)
 		return
 	}
-	body, err := h.git.AdvertiseRefs(r.Context(), repoDir, service)
+	body, err := h.git.AdvertiseRefs(r.Context(), repoDir, service, r.Header.Get("Git-Protocol"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", fmt.Sprintf("application/x-%s-advertisement", strings.TrimPrefix(service, "git-")))
+	w.Header().Set("Content-Type", fmt.Sprintf("application/x-%s-advertisement", service))
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(body)
 }
 
-type rpcFunc func(context.Context, string, io.Reader, io.Writer) error
+type rpcFunc func(context.Context, string, string, io.Reader, io.Writer) error
 
 func (h *Handler) serveRPC(w http.ResponseWriter, r *http.Request, project, name string, fn rpcFunc) {
 	repoDir, err := h.repoDir(project)
@@ -107,7 +107,7 @@ func (h *Handler) serveRPC(w http.ResponseWriter, r *http.Request, project, name
 	}
 	w.Header().Set("Content-Type", fmt.Sprintf("application/x-git-%s-result", name))
 	w.WriteHeader(http.StatusOK)
-	if err := fn(r.Context(), repoDir, r.Body, w); err != nil {
+	if err := fn(r.Context(), repoDir, r.Header.Get("Git-Protocol"), r.Body, w); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "git %s failed: %v\n", name, err)
 	}
 }
