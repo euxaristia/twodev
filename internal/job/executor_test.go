@@ -60,3 +60,63 @@ jobs:
 	}
 }
 
+func TestCheckoutSource(t *testing.T) {
+	logger := NewLogger("checkout-source-test", io.Discard)
+
+	t.Run("clone url wins", func(t *testing.T) {
+		e := NewExecutorWithRepo(t.TempDir(), "/ignored/repo/root", logger)
+		got, err := e.checkoutSource(Context{CloneURL: "http://h/demo.git"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "http://h/demo.git" {
+			t.Fatalf("got %q, want clone url", got)
+		}
+	})
+
+	t.Run("repo root from context", func(t *testing.T) {
+		root := t.TempDir()
+		repoDir := filepath.Join(root, "demo.git")
+		if err := os.MkdirAll(repoDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		e := NewExecutorWithRepo(t.TempDir(), "", logger)
+		got, err := e.checkoutSource(Context{RepoRoot: root, ProjectPath: "demo"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != repoDir {
+			t.Fatalf("got %q, want %q", got, repoDir)
+		}
+	})
+
+	t.Run("repo root falls back to executor", func(t *testing.T) {
+		root := t.TempDir()
+		repoDir := filepath.Join(root, "demo.git")
+		if err := os.MkdirAll(repoDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		e := NewExecutorWithRepo(t.TempDir(), root, logger)
+		got, err := e.checkoutSource(Context{ProjectPath: "demo"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != repoDir {
+			t.Fatalf("got %q, want %q", got, repoDir)
+		}
+	})
+
+	t.Run("missing repo root errors", func(t *testing.T) {
+		e := NewExecutorWithRepo(t.TempDir(), "", logger)
+		if _, err := e.checkoutSource(Context{ProjectPath: "demo"}); err == nil {
+			t.Fatal("expected error when no repo root or clone url")
+		}
+	})
+
+	t.Run("missing repo dir errors", func(t *testing.T) {
+		e := NewExecutorWithRepo(t.TempDir(), t.TempDir(), logger)
+		if _, err := e.checkoutSource(Context{ProjectPath: "demo"}); err == nil {
+			t.Fatal("expected error when local repo dir missing")
+		}
+	})
+}

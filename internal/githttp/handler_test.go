@@ -38,7 +38,7 @@ func TestInfoRefsUploadPack(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/x-upload-pack-advertisement" {
+	if ct := rec.Header().Get("Content-Type"); ct != "application/x-git-upload-pack-advertisement" {
 		t.Fatalf("content-type = %q", ct)
 	}
 	if !strings.Contains(rec.Body.String(), "service=git-upload-pack") {

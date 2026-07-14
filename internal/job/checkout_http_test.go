@@ -3,7 +3,8 @@ package job
 import (
 	"context"
 	"io"
-	"os"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,9 +13,10 @@ import (
 
 	"github.com/euxaristia/twodev/internal/buildspec"
 	"github.com/euxaristia/twodev/internal/git"
+	"github.com/euxaristia/twodev/internal/githttp"
 )
 
-func TestRunCheckoutAndCommand(t *testing.T) {
+func TestRunCheckoutViaHTTPCloneURL(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
@@ -31,6 +33,12 @@ func TestRunCheckoutAndCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	mux := http.NewServeMux()
+	githttp.NewHandler(repoRoot, nil).Register(mux)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cloneURL := server.URL + "/demo.git"
 	spec, err := buildspec.Parse(`
 version: 1
 jobs:
@@ -49,14 +57,14 @@ jobs:
 		t.Fatal(err)
 	}
 
-	logger := NewLogger("checkout-test", io.Discard)
-	exec := NewExecutorWithRepo(workRoot, repoRoot, logger)
+	logger := NewLogger("checkout-http-test", io.Discard)
+	exec := NewExecutorWithRepo(workRoot, "", logger)
 	ctx := Context{
 		ProjectPath: "demo",
 		BuildNumber: 1,
 		JobName:     "ci",
 		Branch:      "main",
-		RepoRoot:    repoRoot,
+		CloneURL:    cloneURL,
 	}
 	ch := logger.Subscribe()
 	if err := exec.RunJob(context.Background(), spec, "ci", ctx); err != nil {
@@ -70,33 +78,7 @@ jobs:
 				return
 			}
 		case <-deadline:
-			t.Fatal("expected command output after checkout")
+			t.Fatal("expected command output after HTTP checkout")
 		}
 	}
-}
-
-func seedCheckoutRepo(ctx context.Context, svc *git.Service, root, bareDir string) error {
-	work := filepath.Join(root, "work")
-	if err := os.MkdirAll(work, 0o755); err != nil {
-		return err
-	}
-	if err := svc.Run(ctx, work, "init"); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(work, "readme.txt"), []byte("checkout-ok"), 0o644); err != nil {
-		return err
-	}
-	if err := svc.Run(ctx, work, "add", "readme.txt"); err != nil {
-		return err
-	}
-	if err := svc.Run(ctx, work, "commit", "-m", "init"); err != nil {
-		return err
-	}
-	if err := svc.Run(ctx, work, "branch", "-M", "main"); err != nil {
-		return err
-	}
-	if err := svc.Run(ctx, work, "remote", "add", "origin", bareDir); err != nil {
-		return err
-	}
-	return svc.Run(ctx, work, "push", "-u", "origin", "main")
 }

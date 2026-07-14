@@ -14,6 +14,7 @@ import (
 	"github.com/euxaristia/twodev/internal/agent/protocol"
 	agentserver "github.com/euxaristia/twodev/internal/agent/server"
 	"github.com/euxaristia/twodev/internal/auth"
+	"github.com/euxaristia/twodev/internal/config"
 	"github.com/euxaristia/twodev/internal/git"
 	"github.com/euxaristia/twodev/internal/scheduler"
 	"github.com/euxaristia/twodev/internal/store"
@@ -59,6 +60,7 @@ func TestDispatcherUsesAgentWhenConnected(t *testing.T) {
 	defer conn.Close()
 	_, _, _ = conn.ReadMessage()
 
+	var seenCloneURL string
 	go func() {
 		for {
 			_, frame, err := conn.ReadMessage()
@@ -72,6 +74,10 @@ func TestDispatcherUsesAgentWhenConnected(t *testing.T) {
 			call, err := protocol.DecodeCall(msg.Data)
 			if err != nil {
 				continue
+			}
+			var payload protocol.RunJobPayload
+			if err := json.Unmarshal(call.Payload, &payload); err == nil {
+				seenCloneURL = payload.CloneURL
 			}
 			result, _ := json.Marshal(protocol.RunJobResult{OK: true})
 			response, _ := protocol.EncodeCall(protocol.Call{ID: call.ID, Result: result})
@@ -90,7 +96,7 @@ func TestDispatcherUsesAgentWhenConnected(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := NewRunner(db, repoRoot, workRoot, nil, nil)
-	dispatcher := NewDispatcher(db, registry, runner, nil)
+	dispatcher := NewDispatcher(db, registry, runner, config.Server{HTTPHost: "127.0.0.1", HTTPPort: 6610}, nil)
 	req := scheduler.JobRequest{
 		ProjectID:   project.ID,
 		ProjectPath: project.Path,
@@ -99,6 +105,10 @@ func TestDispatcherUsesAgentWhenConnected(t *testing.T) {
 	}
 	if err := dispatcher.Handle(context.Background(), req); err != nil {
 		t.Fatal(err)
+	}
+	wantCloneURL := git.ProjectCloneURL("", "127.0.0.1", 6610, project.Path)
+	if seenCloneURL != wantCloneURL {
+		t.Fatalf("clone URL = %q, want %q", seenCloneURL, wantCloneURL)
 	}
 
 	got, err := builds.Get(context.Background(), project.ID, "CI", created.Number)
